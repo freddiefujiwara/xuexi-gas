@@ -124,7 +124,9 @@ function validateStudyInput(body) {
   const seconds = Number(body && body.seconds);
   if (!isFinite(seconds) || seconds < 1 || seconds > 36000) return null;
   const source = body && body.source === 'manual' ? 'manual' : 'auto';
-  return { date: date, seconds: Math.round(seconds), source: source };
+  const rawBatch = String((body && body.batchId) || '');
+  const batchId = /^[A-Za-z0-9_-]{1,64}$/.test(rawBatch) ? rawBatch : null;
+  return { date: date, seconds: Math.round(seconds), source: source, batchId: batchId };
 }
 
 function openSpreadsheet() {
@@ -147,11 +149,41 @@ function readStudyLog() {
   return out;
 }
 
+// 送信済みバッチの一覧（study_batches の行）に batchId があるか。
+function batchSeen(rows, batchId) {
+  if (!batchId) return false;
+  for (let i = 0; i < rows.length; i++) {
+    if (String(rows[i][0]) === batchId) return true;
+  }
+  return false;
+}
+
 function addStudyTime(input) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
     const ss = openSpreadsheet();
+    // 同じバッチIDの再送は加算しない（応答ロスト時の二重加算防止）。
+    let batchSheet = null;
+    if (input.batchId) {
+      batchSheet = ss.getSheetByName('study_batches');
+      if (!batchSheet) {
+        batchSheet = ss.insertSheet('study_batches');
+        batchSheet.appendRow(['batch_id', 'date', 'seconds', 'created_at']);
+      }
+      const seen = batchSheet.getDataRange().getValues().slice(1);
+      if (batchSeen(seen, input.batchId)) {
+        const logSheet = ss.getSheetByName('study_log');
+        let current = 0;
+        if (logSheet) {
+          const vals = logSheet.getDataRange().getValues();
+          for (let i = 1; i < vals.length; i++) {
+            if (toDateStr(vals[i][0]) === input.date) current = Number(vals[i][1] || 0);
+          }
+        }
+        return { total: current, deduped: true };
+      }
+    }
     let sheet = ss.getSheetByName('study_log');
     if (!sheet) {
       sheet = ss.insertSheet('study_log');
@@ -164,11 +196,13 @@ function addStudyTime(input) {
         sheet.getRange(i + 1, 2).setValue(total);
         sheet.getRange(i + 1, 3).setValue(input.source);
         sheet.getRange(i + 1, 4).setValue(new Date().toISOString());
-        return total;
+        if (batchSheet) batchSheet.appendRow([input.batchId, input.date, input.seconds, new Date().toISOString()]);
+        return { total: total, deduped: false };
       }
     }
     sheet.appendRow([input.date, input.seconds, input.source, new Date().toISOString()]);
-    return input.seconds;
+    if (batchSheet) batchSheet.appendRow([input.batchId, input.date, input.seconds, new Date().toISOString()]);
+    return { total: input.seconds, deduped: false };
   } finally {
     lock.releaseLock();
   }
@@ -238,8 +272,8 @@ function doPost(e) {
       if (!study) {
         result = { ok: false, reason: 'bad_request' };
       } else {
-        const total = addStudyTime(study);
-        result = { ok: true, date: study.date, totalSeconds: total };
+        const added = addStudyTime(study);
+        result = { ok: true, date: study.date, totalSeconds: added.total, deduped: added.deduped };
       }
       return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(
         ContentService.MimeType.JSON
@@ -272,4 +306,4 @@ function doPost(e) {
   );
 }
 
-export { rowsToObjects, buildJudgePrompt, parseJudgeResponse, validateStudyInput, toDateStr, buildTtsUrl };
+export { rowsToObjects, buildJudgePrompt, parseJudgeResponse, validateStudyInput, toDateStr, buildTtsUrl, batchSeen };
