@@ -35,3 +35,27 @@ test('データが無い場合は空配列', () => {
   assert.deepEqual(rowsToObjects([['id']]), []);
   assert.deepEqual(rowsToObjects(null), []);
 });
+
+test('列が不足する行は空文字で埋める', () => {
+  const values = [
+    ['id', 'zh', 'ja'],
+    ['c001', '你好'],
+  ];
+  assert.deepEqual(rowsToObjects(values), [{ id: 'c001', zh: '你好', ja: '' }]);
+});
+
+test('数値セルはそのまま保持する', () => {
+  const values = [
+    ['id', 'count'],
+    ['c001', 3],
+  ];
+  assert.deepEqual(rowsToObjects(values), [{ id: 'c001', count: 3 }]);
+});
+
+test('null セルが混ざる行は空行扱いしない', () => {
+  const values = [
+    ['id', 'zh'],
+    [null, '你好'],
+  ];
+  assert.deepEqual(rowsToObjects(values), [{ id: null, zh: '你好' }]);
+});
