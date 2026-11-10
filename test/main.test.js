@@ -108,12 +108,19 @@ test('validateStudyInput は正常な入力を通す', () => {
     date: '2026-11-10',
     seconds: 300,
     source: 'auto',
+    batchId: null,
   });
   assert.deepEqual(validateStudyInput({ date: '2026-11-10', seconds: 61.6, source: 'manual' }), {
     date: '2026-11-10',
     seconds: 62,
     source: 'manual',
+    batchId: null,
   });
+  assert.equal(
+    validateStudyInput({ date: '2026-11-10', seconds: 60, batchId: 'babc123' }).batchId,
+    'babc123'
+  );
+  assert.equal(validateStudyInput({ date: '2026-11-10', seconds: 60, batchId: 'bad id!' }).batchId, null);
   assert.equal(validateStudyInput({ date: '2026-11-10', seconds: 60 }).source, 'auto');
 });
 
@@ -138,4 +145,13 @@ test('Google翻訳TTSのURLを組み立てる', () => {
   assert.ok(url.includes('tl=zh-CN'));
   assert.ok(url.includes('client=tw-ob'));
   assert.ok(url.includes(`q=${encodeURIComponent('我平时搭电车上班。')}`));
+});
+
+test('batchSeen は送信済みバッチを見分ける', () => {
+  const batchSeen = extractFn('batchSeen');
+  const rows = [['b1', '2026-11-11', 60], ['b2', '2026-11-11', 120]];
+  assert.equal(batchSeen(rows, 'b1'), true);
+  assert.equal(batchSeen(rows, 'b3'), false);
+  assert.equal(batchSeen(rows, null), false);
+  assert.equal(batchSeen([], 'b1'), false);
 });
