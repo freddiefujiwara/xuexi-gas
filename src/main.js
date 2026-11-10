@@ -37,7 +37,12 @@ function buildPayload() {
   };
 }
 
-function doGet() {
+function doGet(e) {
+  if (e && e.parameter && e.parameter.text) {
+    return ContentService.createTextOutput(JSON.stringify(handleTts(e.parameter.text))).setMimeType(
+      ContentService.MimeType.JSON
+    );
+  }
   const cache = CacheService.getScriptCache();
   const cached = cache.get('payload_v1');
   let payload;
@@ -52,6 +57,57 @@ function doGet() {
   return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(
     ContentService.MimeType.JSON
   );
+}
+
+// --- 発音音声（Google翻訳TTSを GAS 経由で base64 JSON 返却。/music の music-gas と同方式） ---
+
+function buildTtsUrl(text) {
+  return (
+    'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=zh-CN&q=' +
+    encodeURIComponent(text)
+  );
+}
+
+function ttsCacheKey(text) {
+  const digest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    text,
+    Utilities.Charset.UTF_8
+  );
+  return (
+    'tts_' +
+    digest
+      .map((b) => ('0' + (b & 0xff).toString(16)).slice(-2))
+      .join('')
+  );
+}
+
+function fetchTtsAudio(text) {
+  const cache = CacheService.getScriptCache();
+  const key = ttsCacheKey(text);
+  const cached = cache.get(key);
+  if (cached) return cached;
+  const res = UrlFetchApp.fetch(buildTtsUrl(text), {
+    muteHttpExceptions: true,
+    headers: { 'User-Agent': 'Mozilla/5.0' },
+  });
+  if (res.getResponseCode() !== 200) {
+    throw new Error('TTS fetch failed: ' + res.getResponseCode());
+  }
+  const b64 = Utilities.base64Encode(res.getContent());
+  if (b64.length < 90000) cache.put(key, b64, 21600);
+  return b64;
+}
+
+function handleTts(text) {
+  const trimmed = String(text || '').trim();
+  if (!trimmed) return { ok: false, error: 'text is empty' };
+  if (trimmed.length > 200) return { ok: false, error: 'text is too long' };
+  try {
+    return { ok: true, mimeType: 'audio/mpeg', audio: fetchTtsAudio(trimmed) };
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
 }
 
 // --- 勉強時間の記録（study_log タブ、1日1行） ---
@@ -215,4 +271,4 @@ function doPost(e) {
   );
 }
 
-export { rowsToObjects, buildJudgePrompt, parseJudgeResponse, validateStudyInput, toDateStr };
+export { rowsToObjects, buildJudgePrompt, parseJudgeResponse, validateStudyInput, toDateStr, buildTtsUrl };
