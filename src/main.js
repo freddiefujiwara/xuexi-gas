@@ -89,8 +89,14 @@ function parseJudgeResponse(text) {
 }
 
 function judgeViaWrapper(input, wrapperUrl) {
-  const url = `${wrapperUrl}?p=${encodeURIComponent(buildJudgePrompt(input))}`;
-  const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  // The judge prompt is far beyond UrlFetchApp's URL length limit when
+  // URL-encoded, so send it in the POST body (groq-gas doPost).
+  const res = UrlFetchApp.fetch(wrapperUrl, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({ p: buildJudgePrompt(input) }),
+    muteHttpExceptions: true,
+  });
   if (res.getResponseCode() !== 200) return null;
   const body = JSON.parse(res.getContentText());
   if (!body || !body.answer) return null;
