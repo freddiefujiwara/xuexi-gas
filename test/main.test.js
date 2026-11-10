@@ -101,3 +101,29 @@ test('parseJudgeResponse は不正な入力に null を返す', () => {
   assert.equal(parseJudgeResponse('{"verdict":"great","comment":"x"}'), null);
   assert.equal(parseJudgeResponse('{invalid json}'), null);
 });
+
+test('validateStudyInput は正常な入力を通す', () => {
+  const validateStudyInput = extractFn('validateStudyInput');
+  assert.deepEqual(validateStudyInput({ date: '2026-11-10', seconds: 300, source: 'auto' }), {
+    date: '2026-11-10',
+    seconds: 300,
+    source: 'auto',
+  });
+  assert.deepEqual(validateStudyInput({ date: '2026-11-10', seconds: 61.6, source: 'manual' }), {
+    date: '2026-11-10',
+    seconds: 62,
+    source: 'manual',
+  });
+  assert.equal(validateStudyInput({ date: '2026-11-10', seconds: 60 }).source, 'auto');
+});
+
+test('validateStudyInput は不正な入力に null を返す', () => {
+  const validateStudyInput = extractFn('validateStudyInput');
+  assert.equal(validateStudyInput({ date: '2026/11/10', seconds: 60 }), null);
+  assert.equal(validateStudyInput({ date: '', seconds: 60 }), null);
+  assert.equal(validateStudyInput({ date: '2026-11-10', seconds: 0 }), null);
+  assert.equal(validateStudyInput({ date: '2026-11-10', seconds: -5 }), null);
+  assert.equal(validateStudyInput({ date: '2026-11-10', seconds: 36001 }), null);
+  assert.equal(validateStudyInput({ date: '2026-11-10', seconds: 'abc' }), null);
+  assert.equal(validateStudyInput(null), null);
+});
