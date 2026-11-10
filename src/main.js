@@ -33,6 +33,7 @@ function buildPayload() {
     cards: readSheetAsObjects(ss, 'cards'),
     drills: readSheetAsObjects(ss, 'drills'),
     mistakes: readSheetAsObjects(ss, 'mistakes'),
+    words: readSheetAsObjects(ss, 'words'),
     generatedAt: new Date().toISOString(),
   };
 }
@@ -44,13 +45,13 @@ function doGet(e) {
     );
   }
   const cache = CacheService.getScriptCache();
-  const cached = cache.get('payload_v1');
+  const cached = cache.get('payload_v2');
   let payload;
   if (cached) {
     payload = JSON.parse(cached);
   } else {
     payload = buildPayload();
-    cache.put('payload_v1', JSON.stringify(payload), 600);
+    cache.put('payload_v2', JSON.stringify(payload), 600);
   }
   // Study time changes with every log call, so it is read fresh, never cached.
   payload.studyLog = readStudyLog();
