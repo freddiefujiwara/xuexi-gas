@@ -49,9 +49,9 @@ function doGet() {
 }
 
 // --- 疑問詞ドリルの自由回答を Groq で判定する ---
-// APIキーはスクリプトプロパティ GROQ_API_KEY（time-table-gas と同じ流儀）。
-// モデルは GROQ_MODEL で差し替え可能。キー未設定やAPI失敗時は ok:false を返し、
-// フロント側は従来の自己判定にフォールバックする。
+// Groq の呼び出しは既存のラッパー groq-gas（Web App）に委譲する。
+// ラッパーの URL はスクリプトプロパティ GROQ_API_URL から読む。
+// 未設定やAPI失敗時は ok:false を返し、フロント側は従来の自己判定にフォールバックする。
 
 function buildJudgePrompt(input) {
   return [
@@ -88,25 +88,13 @@ function parseJudgeResponse(text) {
   return { verdict: obj.verdict, comment: String(obj.comment || '') };
 }
 
-function judgeWithGroq(input, apiKey, model) {
-  const res = UrlFetchApp.fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'post',
-    contentType: 'application/json',
-    headers: { Authorization: `Bearer ${apiKey}` },
-    payload: JSON.stringify({
-      model: model,
-      temperature: 0.2,
-      max_tokens: 300,
-      messages: [{ role: 'user', content: buildJudgePrompt(input) }],
-    }),
-    muteHttpExceptions: true,
-  });
+function judgeViaWrapper(input, wrapperUrl) {
+  const url = `${wrapperUrl}?p=${encodeURIComponent(buildJudgePrompt(input))}`;
+  const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) return null;
   const body = JSON.parse(res.getContentText());
-  const content = body && body.choices && body.choices[0] && body.choices[0].message
-    ? body.choices[0].message.content
-    : '';
-  return parseJudgeResponse(content);
+  if (!body || !body.answer) return null;
+  return parseJudgeResponse(body.answer);
 }
 
 function doPost(e) {
@@ -122,13 +110,11 @@ function doPost(e) {
     if (!input.question || !input.expected || !input.answer || input.answer.length > 500) {
       result = { ok: false, reason: 'bad_request' };
     } else {
-      const props = PropertiesService.getScriptProperties();
-      const apiKey = props.getProperty('GROQ_API_KEY');
-      if (!apiKey) {
-        result = { ok: false, reason: 'no_key' };
+      const wrapperUrl = PropertiesService.getScriptProperties().getProperty('GROQ_API_URL');
+      if (!wrapperUrl) {
+        result = { ok: false, reason: 'no_wrapper' };
       } else {
-        const model = props.getProperty('GROQ_MODEL') || 'llama-3.3-70b-versatile';
-        const judged = judgeWithGroq(input, apiKey, model);
+        const judged = judgeViaWrapper(input, wrapperUrl);
         result = judged
           ? { ok: true, verdict: judged.verdict, comment: judged.comment }
           : { ok: false, reason: 'api_error' };
