@@ -40,12 +40,81 @@ function buildPayload() {
 function doGet() {
   const cache = CacheService.getScriptCache();
   const cached = cache.get('payload_v1');
+  let payload;
   if (cached) {
-    return ContentService.createTextOutput(cached).setMimeType(ContentService.MimeType.JSON);
+    payload = JSON.parse(cached);
+  } else {
+    payload = buildPayload();
+    cache.put('payload_v1', JSON.stringify(payload), 600);
   }
-  const payload = JSON.stringify(buildPayload());
-  cache.put('payload_v1', payload, 600);
-  return ContentService.createTextOutput(payload).setMimeType(ContentService.MimeType.JSON);
+  // Study time changes with every log call, so it is read fresh, never cached.
+  payload.studyLog = readStudyLog();
+  return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(
+    ContentService.MimeType.JSON
+  );
+}
+
+// --- 勉強時間の記録（study_log タブ、1日1行） ---
+
+function toDateStr(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, 'Asia/Tokyo', 'yyyy-MM-dd');
+  return String(v || '');
+}
+
+function validateStudyInput(body) {
+  const date = String((body && body.date) || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const seconds = Number(body && body.seconds);
+  if (!isFinite(seconds) || seconds < 1 || seconds > 36000) return null;
+  const source = body && body.source === 'manual' ? 'manual' : 'auto';
+  return { date: date, seconds: Math.round(seconds), source: source };
+}
+
+function openSpreadsheet() {
+  const id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
+  if (!id) throw new Error('SPREADSHEET_ID is not set in script properties');
+  return SpreadsheetApp.openById(id);
+}
+
+function readStudyLog() {
+  const sheet = openSpreadsheet().getSheetByName('study_log');
+  if (!sheet) return [];
+  const values = sheet.getDataRange().getValues();
+  const out = [];
+  for (let i = 1; i < values.length; i++) {
+    const date = toDateStr(values[i][0]);
+    const seconds = Number(values[i][1]);
+    if (date && isFinite(seconds) && seconds > 0) out.push({ date: date, seconds: seconds });
+  }
+  out.sort((a, b) => (a.date < b.date ? -1 : 1));
+  return out;
+}
+
+function addStudyTime(input) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const ss = openSpreadsheet();
+    let sheet = ss.getSheetByName('study_log');
+    if (!sheet) {
+      sheet = ss.insertSheet('study_log');
+      sheet.appendRow(['date', 'seconds', 'source', 'updated_at']);
+    }
+    const values = sheet.getDataRange().getValues();
+    for (let i = 1; i < values.length; i++) {
+      if (toDateStr(values[i][0]) === input.date) {
+        const total = Number(values[i][1] || 0) + input.seconds;
+        sheet.getRange(i + 1, 2).setValue(total);
+        sheet.getRange(i + 1, 3).setValue(input.source);
+        sheet.getRange(i + 1, 4).setValue(new Date().toISOString());
+        return total;
+      }
+    }
+    sheet.appendRow([input.date, input.seconds, input.source, new Date().toISOString()]);
+    return input.seconds;
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // --- 疑問詞ドリルの自由回答を Groq で判定する ---
@@ -107,6 +176,18 @@ function doPost(e) {
   let result;
   try {
     const body = JSON.parse(e.postData.contents);
+    if (body && body.action === 'addStudy') {
+      const study = validateStudyInput(body);
+      if (!study) {
+        result = { ok: false, reason: 'bad_request' };
+      } else {
+        const total = addStudyTime(study);
+        result = { ok: true, date: study.date, totalSeconds: total };
+      }
+      return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(
+        ContentService.MimeType.JSON
+      );
+    }
     const input = {
       question: String(body.question || ''),
       qword: String(body.qword || ''),
@@ -134,4 +215,4 @@ function doPost(e) {
   );
 }
 
-export { rowsToObjects, buildJudgePrompt, parseJudgeResponse };
+export { rowsToObjects, buildJudgePrompt, parseJudgeResponse, validateStudyInput, toDateStr };
