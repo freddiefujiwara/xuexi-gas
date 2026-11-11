@@ -1,5 +1,5 @@
 // xuexi-gas: 中国語レッスン復習アプリ /xuexi のデータAPI。
-// 正本は Google Sheets「xuexi カードデータ」(cards / drills / mistakes / words の4タブ)。
+// 正本は Google Sheets「xuexi カードデータ」(cards / drills / words の3タブ)。
 // 学習記録は端末ローカル保存に移行済みで、このAPIでは扱わない。
 // スプレッドシートIDはスクリプトプロパティ SPREADSHEET_ID から読む(コードに直書きしない)。
 
@@ -33,7 +33,6 @@ function buildPayload() {
   return {
     cards: readSheetAsObjects(ss, 'cards'),
     drills: readSheetAsObjects(ss, 'drills'),
-    mistakes: readSheetAsObjects(ss, 'mistakes'),
     words: readSheetAsObjects(ss, 'words'),
     generatedAt: new Date().toISOString(),
   };
