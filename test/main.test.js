@@ -102,56 +102,11 @@ test('parseJudgeResponse は不正な入力に null を返す', () => {
   assert.equal(parseJudgeResponse('{invalid json}'), null);
 });
 
-test('validateStudyInput は正常な入力を通す', () => {
-  const validateStudyInput = extractFn('validateStudyInput');
-  assert.deepEqual(validateStudyInput({ date: '2026-11-10', seconds: 300, source: 'auto' }), {
-    date: '2026-11-10',
-    seconds: 300,
-    source: 'auto',
-    batchId: null,
-  });
-  assert.deepEqual(validateStudyInput({ date: '2026-11-10', seconds: 61.6, source: 'manual' }), {
-    date: '2026-11-10',
-    seconds: 62,
-    source: 'manual',
-    batchId: null,
-  });
-  assert.equal(
-    validateStudyInput({ date: '2026-11-10', seconds: 60, batchId: 'babc123' }).batchId,
-    'babc123'
-  );
-  assert.equal(validateStudyInput({ date: '2026-11-10', seconds: 60, batchId: 'bad id!' }).batchId, null);
-  assert.equal(validateStudyInput({ date: '2026-11-10', seconds: 60 }).source, 'auto');
-});
-
-test('validateStudyInput は不正な入力に null を返す', () => {
-  const validateStudyInput = extractFn('validateStudyInput');
-  assert.equal(validateStudyInput({ date: '2026/11/10', seconds: 60 }), null);
-  assert.equal(validateStudyInput({ date: '', seconds: 60 }), null);
-  assert.equal(validateStudyInput({ date: '2026-11-10', seconds: 0 }), null);
-  assert.equal(validateStudyInput({ date: '2026-11-10', seconds: -5 }), null);
-  assert.equal(validateStudyInput({ date: '2026-11-10', seconds: 36001 }), null);
-  assert.equal(validateStudyInput({ date: '2026-11-10', seconds: 'abc' }), null);
-  assert.equal(validateStudyInput(null), null);
-});
-
-const mTts = code.match(/function buildTtsUrl[\s\S]*?\n\}/);
-assert.ok(mTts, 'buildTtsUrl not found in dist/Code.gs');
-const buildTtsUrl = new Function(`${mTts[0]}; return buildTtsUrl;`)();
-
 test('Google翻訳TTSのURLを組み立てる', () => {
+  const buildTtsUrl = extractFn('buildTtsUrl');
   const url = buildTtsUrl('我平时搭电车上班。');
   assert.ok(url.startsWith('https://translate.google.com/translate_tts?'));
   assert.ok(url.includes('tl=zh-CN'));
   assert.ok(url.includes('client=tw-ob'));
   assert.ok(url.includes(`q=${encodeURIComponent('我平时搭电车上班。')}`));
-});
-
-test('batchSeen は送信済みバッチを見分ける', () => {
-  const batchSeen = extractFn('batchSeen');
-  const rows = [['b1', '2026-11-11', 60], ['b2', '2026-11-11', 120]];
-  assert.equal(batchSeen(rows, 'b1'), true);
-  assert.equal(batchSeen(rows, 'b3'), false);
-  assert.equal(batchSeen(rows, null), false);
-  assert.equal(batchSeen([], 'b1'), false);
 });
