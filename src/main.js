@@ -2,6 +2,8 @@
 // 正本は Google Sheets「xuexi カードデータ」(cards / drills / words の3タブ)。
 // 学習記録は端末ローカル保存に移行済みで、このAPIでは扱わない。
 // スプレッドシートIDはスクリプトプロパティ SPREADSHEET_ID から読む(コードに直書きしない)。
+// データはセクション別に CacheService へ6時間キャッシュし、1時間ごとの
+// トリガー（preCacheXuexi）が温め直す。?type=cards|drills|words で単独取得も可。
 
 function rowsToObjects(values) {
   if (!values || values.length < 2) return [];
@@ -26,16 +28,59 @@ function readSheetAsObjects(ss, sheetName) {
   return rowsToObjects(values);
 }
 
-function buildPayload() {
+const PAYLOAD_TTL_SECONDS = 21600; // CacheService の上限（6時間）
+
+function sectionCacheKey(name) {
+  return 'section_v1_' + name;
+}
+
+function isSectionName(name) {
+  return ['cards', 'drills', 'words'].indexOf(name) >= 0;
+}
+
+function openDataSpreadsheet() {
   const id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
   if (!id) throw new Error('SPREADSHEET_ID is not set in script properties');
-  const ss = SpreadsheetApp.openById(id);
+  return SpreadsheetApp.openById(id);
+}
+
+function readSection(name, forceRefresh) {
+  const cache = CacheService.getScriptCache();
+  const key = sectionCacheKey(name);
+  if (!forceRefresh) {
+    const cached = cache.get(key);
+    if (cached) return JSON.parse(cached);
+  }
+  const rows = readSheetAsObjects(openDataSpreadsheet(), name);
+  cache.put(key, JSON.stringify(rows), PAYLOAD_TTL_SECONDS);
+  cache.put('sections_built_at', new Date().toISOString(), PAYLOAD_TTL_SECONDS);
+  return rows;
+}
+
+function sectionsBuiltAt() {
+  return CacheService.getScriptCache().get('sections_built_at') || new Date().toISOString();
+}
+
+function buildPayload(forceRefresh) {
   return {
-    cards: readSheetAsObjects(ss, 'cards'),
-    drills: readSheetAsObjects(ss, 'drills'),
-    words: readSheetAsObjects(ss, 'words'),
-    generatedAt: new Date().toISOString(),
+    cards: readSection('cards', forceRefresh),
+    drills: readSection('drills', forceRefresh),
+    words: readSection('words', forceRefresh),
+    generatedAt: sectionsBuiltAt(),
   };
+}
+
+// 1時間ごとのトリガーから呼ばれ、全セクションのキャッシュを温め直す。
+function preCacheXuexi() {
+  buildPayload(true);
+}
+
+// キャッシュ温め直しのトリガーを（再）登録する。エディタから一度だけ手動実行する。
+function setupCacheWarmer() {
+  ScriptApp.getProjectTriggers().forEach((t) => {
+    if (t.getHandlerFunction() === 'preCacheXuexi') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('preCacheXuexi').timeBased().everyHours(1).create();
 }
 
 function doGet(e) {
@@ -44,14 +89,13 @@ function doGet(e) {
       ContentService.MimeType.JSON
     );
   }
-  const cache = CacheService.getScriptCache();
-  const cached = cache.get('payload_v2');
+  const type = e && e.parameter && e.parameter.type;
   let payload;
-  if (cached) {
-    payload = JSON.parse(cached);
+  if (isSectionName(type)) {
+    payload = { generatedAt: sectionsBuiltAt() };
+    payload[type] = readSection(type, false);
   } else {
-    payload = buildPayload();
-    cache.put('payload_v2', JSON.stringify(payload), 600);
+    payload = buildPayload(false);
   }
   return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(
     ContentService.MimeType.JSON
@@ -195,4 +239,4 @@ function doPost(e) {
   );
 }
 
-export { rowsToObjects, buildJudgePrompt, parseJudgeResponse, buildTtsUrl };
+export { rowsToObjects, buildJudgePrompt, parseJudgeResponse, buildTtsUrl, sectionCacheKey, isSectionName };

@@ -110,3 +110,19 @@ test('Google翻訳TTSのURLを組み立てる', () => {
   assert.ok(url.includes('client=tw-ob'));
   assert.ok(url.includes(`q=${encodeURIComponent('我平时搭电车上班。')}`));
 });
+
+test('セクションのキャッシュキーを組み立てる', () => {
+  const sectionCacheKey = extractFn('sectionCacheKey');
+  assert.equal(sectionCacheKey('cards'), 'section_v1_cards');
+  assert.equal(sectionCacheKey('words'), 'section_v1_words');
+});
+
+test('セクション名の判定', () => {
+  const isSectionName = extractFn('isSectionName');
+  assert.equal(isSectionName('cards'), true);
+  assert.equal(isSectionName('drills'), true);
+  assert.equal(isSectionName('words'), true);
+  assert.equal(isSectionName('payload'), false);
+  assert.equal(isSectionName(''), false);
+  assert.equal(isSectionName(undefined), false);
+});
