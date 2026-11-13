@@ -327,6 +327,18 @@ test('doPost は必須項目の欠落と長すぎる回答を bad_request にす
   );
 });
 
+test('doPost は長すぎる質問・模範解答も bad_request にする', () => {
+  const { app } = makeMocks();
+  assert.deepEqual(
+    parseOutput(app.doPost({ postData: { contents: judgeBody({ question: 'a'.repeat(1001) }) } })),
+    { ok: false, reason: 'bad_request' }
+  );
+  assert.deepEqual(
+    parseOutput(app.doPost({ postData: { contents: judgeBody({ expected: 'a'.repeat(501) }) } })),
+    { ok: false, reason: 'bad_request' }
+  );
+});
+
 test('doPost は GROQ_API_URL 未設定なら no_wrapper を返す', () => {
   const { app, state } = makeMocks();
   delete state.properties.GROQ_API_URL;
