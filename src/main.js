@@ -218,7 +218,19 @@ function doPost(e) {
       expected: String(body.expected || ''),
       answer: String(body.answer || ''),
     };
-    if (!input.question || !input.expected || !input.answer || input.answer.length > 500) {
+    // Every field is capped: this endpoint is anonymous (the frontend is
+    // public), so an uncapped question/expected would let anyone inflate
+    // the Groq prompt — and the owner's quota — at will. Legit lesson
+    // content is far below these limits.
+    if (
+      !input.question ||
+      !input.expected ||
+      !input.answer ||
+      input.question.length > 1000 ||
+      input.qword.length > 50 ||
+      input.expected.length > 500 ||
+      input.answer.length > 500
+    ) {
       result = { ok: false, reason: 'bad_request' };
     } else {
       const wrapperUrl = PropertiesService.getScriptProperties().getProperty('GROQ_API_URL');
