@@ -365,6 +365,21 @@ test('doPost はラッパーの判定結果を ok:true で返す', () => {
   assert.ok(sent.p.includes('我昨天工作八个小时。'));
 });
 
+test('doPost は GROQ_GAS_TOKEN 設定時にトークンをラッパーへ送る', () => {
+  const { app, state } = makeMocks();
+  state.properties.GROQ_GAS_TOKEN = 'test-token';
+  state.fetchHandler = () => ({
+    code: 200,
+    text: JSON.stringify({
+      answer: '判定：{"verdict":"correct","comment":"良い"}',
+    }),
+  });
+  const payload = parseOutput(app.doPost({ postData: { contents: judgeBody() } }));
+  assert.deepEqual(payload, { ok: true, verdict: 'correct', comment: '良い' });
+  const sent = JSON.parse(state.fetchCalls[0].options.payload);
+  assert.equal(sent.token, 'test-token');
+});
+
 test('doPost はラッパーの HTTP 失敗を api_error にする', () => {
   const { app, state } = makeMocks();
   state.fetchHandler = () => ({ code: 500, text: 'error' });

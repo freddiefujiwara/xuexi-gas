@@ -196,10 +196,17 @@ function parseJudgeResponse(text) {
 function judgeViaWrapper(input, wrapperUrl) {
   // The judge prompt is far beyond UrlFetchApp's URL length limit when
   // URL-encoded, so send it in the POST body (groq-gas doPost).
+  const payload = { p: buildJudgePrompt(input) };
+  // groq-gas requires the shared token from the GROQ_GAS_TOKEN script
+  // property; send it when configured.
+  const token = PropertiesService.getScriptProperties().getProperty('GROQ_GAS_TOKEN');
+  if (token) {
+    payload.token = token;
+  }
   const res = UrlFetchApp.fetch(wrapperUrl, {
     method: 'post',
     contentType: 'application/json',
-    payload: JSON.stringify({ p: buildJudgePrompt(input) }),
+    payload: JSON.stringify(payload),
     muteHttpExceptions: true,
   });
   if (res.getResponseCode() !== 200) return null;
