@@ -5,6 +5,12 @@
 // データはセクション別に CacheService へ6時間キャッシュし、1時間ごとの
 // トリガー（preCacheXuexi）が温め直す。?type=cards|drills|words で単独取得も可。
 
+function jsonOut(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
+    ContentService.MimeType.JSON
+  );
+}
+
 function rowsToObjects(values) {
   if (!values || values.length < 2) return [];
   const headers = values[0];
@@ -85,9 +91,7 @@ function setupCacheWarmer() {
 
 function doGet(e) {
   if (e && e.parameter && e.parameter.text) {
-    return ContentService.createTextOutput(JSON.stringify(handleTts(e.parameter.text))).setMimeType(
-      ContentService.MimeType.JSON
-    );
+    return jsonOut(handleTts(e.parameter.text));
   }
   const type = e && e.parameter && e.parameter.type;
   let payload;
@@ -97,9 +101,7 @@ function doGet(e) {
   } else {
     payload = buildPayload(false);
   }
-  return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(
-    ContentService.MimeType.JSON
-  );
+  return jsonOut(payload);
 }
 
 // --- 発音音声（Google翻訳TTSを GAS 経由で base64 JSON 返却。/music の music-gas と同方式） ---
@@ -138,7 +140,7 @@ function fetchTtsAudio(text) {
     throw new Error('TTS fetch failed: ' + res.getResponseCode());
   }
   const b64 = Utilities.base64Encode(res.getContent());
-  if (b64.length < 90000) cache.put(key, b64, 21600);
+  if (b64.length < 90000) cache.put(key, b64, PAYLOAD_TTL_SECONDS);
   return b64;
 }
 
@@ -253,9 +255,7 @@ function doPost(e) {
   } catch (err) {
     result = { ok: false, reason: 'bad_request' };
   }
-  return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(
-    ContentService.MimeType.JSON
-  );
+  return jsonOut(result);
 }
 
 export { rowsToObjects, buildJudgePrompt, parseJudgeResponse, buildTtsUrl, sectionCacheKey, isSectionName };
