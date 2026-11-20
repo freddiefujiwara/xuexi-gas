@@ -12,12 +12,14 @@ function jsonOut(obj) {
 }
 
 function rowsToObjects(values) {
-  if (!values || values.length < 2) return [];
+  if (!Array.isArray(values) || values.length < 2) return [];
   const headers = values[0];
+  if (!Array.isArray(headers)) return [];
   const out = [];
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
-    if (!row || row.every((c) => c === '' || c === null || c === undefined)) continue;
+    if (!Array.isArray(row)) continue;
+    if (row.every((c) => c === '' || c === null || c === undefined)) continue;
     const obj = {};
     headers.forEach((h, idx) => {
       obj[h] = row[idx] === undefined ? '' : row[idx];
@@ -145,7 +147,7 @@ function fetchTtsAudio(text) {
 }
 
 function handleTts(text) {
-  const trimmed = String(text || '').trim();
+  const trimmed = (typeof text === 'string' ? text : '').trim();
   if (!trimmed) return { ok: false, error: 'text is empty' };
   if (trimmed.length > 200) return { ok: false, error: 'text is too long' };
   try {
@@ -181,7 +183,7 @@ function buildJudgePrompt(input) {
 }
 
 function parseJudgeResponse(text) {
-  if (!text) return null;
+  if (typeof text !== 'string' || !text) return null;
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
   if (start < 0 || end <= start) return null;
@@ -192,7 +194,17 @@ function parseJudgeResponse(text) {
     return null;
   }
   if (!obj || ['correct', 'close', 'wrong'].indexOf(obj.verdict) < 0) return null;
-  return { verdict: obj.verdict, comment: String(obj.comment || '') };
+  // comment はモデルの出力テキストが前提。文字列と数値だけを文字列化し、
+  // オブジェクトや配列（"[object Object]" や "a,b" が漏れる）や
+  // 文字列化できない値は空文字として扱う。
+  const rawComment = obj.comment;
+  const comment =
+    typeof rawComment === 'string'
+      ? rawComment
+      : typeof rawComment === 'number'
+        ? String(rawComment)
+        : '';
+  return { verdict: obj.verdict, comment };
 }
 
 function judgeViaWrapper(input, wrapperUrl) {
@@ -212,7 +224,12 @@ function judgeViaWrapper(input, wrapperUrl) {
     muteHttpExceptions: true,
   });
   if (res.getResponseCode() !== 200) return null;
-  const body = JSON.parse(res.getContentText());
+  let body = null;
+  try {
+    body = JSON.parse(res.getContentText());
+  } catch (e) {
+    return null;
+  }
   if (!body || !body.answer) return null;
   return parseJudgeResponse(body.answer);
 }
