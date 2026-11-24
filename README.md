@@ -2,7 +2,7 @@
 
 中国語レッスン復習アプリ `/xuexi` のデータAPI（Google Apps Script）。
 
-- 正本データは Google Sheets「xuexi カードデータ」（タブ：cards / drills / mistakes）。
+- 正本データは Google Sheets「xuexi」（タブ：cards / drills / words）。
 - スプレッドシートIDはスクリプトプロパティ `SPREADSHEET_ID` で渡す（コードに直書きしない）。
 - `doGet` が3タブ分を JSON で返す。応答は CacheService で10分キャッシュする。
 
